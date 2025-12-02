@@ -10,9 +10,7 @@ const FILES_TO_CACHE = [
 // Install SW
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(FILES_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then(cache => cache.addAll(FILES_TO_CACHE))
   );
   self.skipWaiting();
 });
@@ -31,29 +29,29 @@ self.addEventListener("activate", event => {
   self.clients.claim();
 });
 
-// Skip SW for file picker operations
+// Fetch handler (JEDINI!)
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
 
-  // Ako je request za file-system API -> preskoči SW
-  if (url.pathname.includes("file") || url.protocol === "blob:") {
-    return;
-  }
-});
-
-// Fetch handler
-self.addEventListener("fetch", event => {
-  const url = new URL(event.request.url);
-
-  // Ne diraj blob, file, drive API
-  if (url.protocol === "blob:" || url.pathname.endsWith(".json")) {
-    return;
+  // ❌ Ne presreći FilePicker / blob / JSON backup
+  if (
+    url.protocol === "blob:" ||
+    url.pathname.includes("file") ||
+    url.pathname.endsWith(".json")
+  ) {
+    return; // pusti browser da obradi sam
   }
 
+  // Ostalo ide u cache fallback
   event.respondWith(
     caches.match(event.request).then(response => {
-      return response || fetch(event.request).catch(() => caches.match("index.html"));
+      return (
+        response ||
+        fetch(event.request).catch(() => {
+          // Offline fallback — uvijek vrati index.html (PWA standard)
+          return caches.match("index.html");
+        })
+      );
     })
   );
 });
-
