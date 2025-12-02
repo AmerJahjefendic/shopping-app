@@ -31,16 +31,28 @@ self.addEventListener("activate", event => {
   self.clients.claim();
 });
 
+// Skip SW for file picker operations
+self.addEventListener("fetch", event => {
+  const url = new URL(event.request.url);
+
+  // Ako je request za file-system API -> preskoči SW
+  if (url.pathname.includes("file") || url.protocol === "blob:") {
+    return;
+  }
+});
+
 // Fetch handler
 self.addEventListener("fetch", event => {
+  const url = new URL(event.request.url);
+
+  // Ne diraj blob, file, drive API
+  if (url.protocol === "blob:" || url.pathname.endsWith(".json")) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then(response => {
-      return (
-        response ||
-        fetch(event.request).catch(() =>
-          caches.match("index.html")
-        )
-      );
+      return response || fetch(event.request).catch(() => caches.match("index.html"));
     })
   );
 });
