@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pametna Shopping Lista</title>
 
-    <!-- Manifest (PRAVILNA putanja!) -->
+    <!-- Manifest -->
     <link rel="manifest" href="manifest.json">
 
     <!-- Service Worker registracija -->
@@ -227,50 +227,93 @@ document.querySelectorAll(".tab").forEach(btn=>{
     };
 });
 
+/* SAVE — radi na Androidu, iOS-u i desktopu */
 document.getElementById("saveDrive").onclick = async () => {
-    const json = JSON.stringify(items,null,2);
-    const blob = new Blob([json],{type:"application/json"});
+    const json = JSON.stringify(items, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const fileName = "shopping_backup.json";
+    const file = new File([blob], fileName, { type: "application/json" });
 
-    if (isIOS()){
+    // 1) Mobiteli → ShareSheet (Drive, Files, iCloud...)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
             await navigator.share({
-                title:"shopping_backup.json",
-                text:"Backup",
-                files:[new File([blob], "shopping_backup.json")]
+                title: "Shopping backup",
+                text: "Shopping lista backup",
+                files: [file]
             });
-        } catch {}
+        } catch (e) {}
         return;
     }
 
-    try{
-        const h = await window.showSaveFilePicker({
-            suggestedName:"shopping_backup.json",
-            types:[{ description:"JSON", accept:{"application/json":[".json"]}}]
-        });
+    // 2) Desktop Chrome → ako postoji FilePicker
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: fileName,
+                types: [{ description: "JSON", accept: { "application/json": [".json"] } }]
+            });
+            const writable = await handle.createWritable();
+            await writable.truncate(0);
+            await writable.write(json);
+            await writable.close();
+            alert("Sačuvano!");
+        } catch (e) {}
+        return;
+    }
 
-        const w = await h.createWritable();
-        await w.truncate(0);
-        await w.write(json);
-        await w.close();
-        alert("Sačuvano!");
-    }catch{}
+    // 3) Fallback → download fajla
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    alert("JSON preuzet (download).");
 };
 
+/* LOAD — radi svugdje preko <input type="file"> */
 document.getElementById("loadDrive").onclick = async () => {
-    try{
-        const [h] = await window.showOpenFilePicker({
-            types:[{description:"JSON",accept:{"application/json":[".json"]}}]
-        });
+    // Ako postoji FilePicker (desktop) – možeš koristiti i njega
+    if (window.showOpenFilePicker) {
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{ description: "JSON fajl", accept: { "application/json": [".json"] } }]
+            });
+            const file = await handle.getFile();
+            let loaded = JSON.parse(await file.text());
+            loaded = loaded.map(x => ({ ...x, qty: x.qty || 1 }));
+            items = loaded;
+            saveLocal();
+            renderLists();
+            alert("Učitano!");
+            return;
+        } catch (e) {
+            // ako korisnik odustane – ništa
+        }
+    }
 
-        const f = await h.getFile();
-        let lo = JSON.parse(await f.text());
-        lo = lo.map(x => ({...x, qty:x.qty||1}));
-
-        items = lo;
-        saveLocal();
-        renderLists();
-        alert("Učitano!");
-    }catch{}
+    // Fallback za sve (Android, iOS, PWA, desktop)
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            let loaded = JSON.parse(await file.text());
+            loaded = loaded.map(x => ({ ...x, qty: x.qty || 1 }));
+            items = loaded;
+            saveLocal();
+            renderLists();
+            alert("Učitano!");
+        } catch (err) {
+            alert("Neispravan JSON fajl.");
+        }
+    };
+    input.click();
 };
 
 const quickHome={
@@ -289,7 +332,7 @@ document.querySelectorAll(".quick-btn").forEach(btn=>{
         let name = raw.replace(/[^\p{L}\p{N}\s]/gu, "").trim();
 
         if (items.some(x=>x.name.toLowerCase()===name.toLowerCase()))
-            return alert("Artikal već postoji!");
+            return alert(`Artikal "${name}" već postoji!`);
 
         let homeCat = quickHome[name] || "imamo";
 
