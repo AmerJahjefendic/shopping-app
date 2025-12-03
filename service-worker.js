@@ -1,56 +1,28 @@
-const CACHE_NAME = "shopping-app-v1";
-const FILES_TO_CACHE = [
-  "index.html",
-  "manifest.json",
-  "icons/icon-192.png",
-  "icons/icon-512.png",
-  "icons/icon-1024.png"
-];
+// =======================================
+//     Shopping Lista — Service Worker v2.0
+//     NO CACHE MODE (fix JSON problems)
+// =======================================
 
-// Install SW
 self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(FILES_TO_CACHE))
-  );
-  self.skipWaiting();
+  self.skipWaiting(); // aktiviraj odmah
 });
 
-// Activate SW
 self.addEventListener("activate", event => {
+  // obriši SVE stare SW keševe
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.map(key => {
-          if (key !== CACHE_NAME) return caches.delete(key);
-        })
-      )
-    )
+    caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key))))
   );
+
   self.clients.claim();
 });
 
-// Fetch handler (JEDINI!)
+// NO CACHE – uvijek povuci svježu verziju
 self.addEventListener("fetch", event => {
-  const url = new URL(event.request.url);
-
-  // ❌ Ne presreći FilePicker / blob / JSON backup
-  if (
-    url.protocol === "blob:" ||
-    url.pathname.includes("file") ||
-    url.pathname.endsWith(".json")
-  ) {
-    return; // pusti browser da obradi sam
-  }
-
-  // Ostalo ide u cache fallback
   event.respondWith(
-    caches.match(event.request).then(response => {
-      return (
-        response ||
-        fetch(event.request).catch(() => {
-          // Offline fallback — uvijek vrati index.html (PWA standard)
-          return caches.match("index.html");
-        })
+    fetch(event.request).catch(() => {
+      return new Response(
+        "<h1>Offline</h1><p>Aplikacija zahtijeva internet konekciju.</p>",
+        { headers: { "Content-Type": "text/html" } }
       );
     })
   );
